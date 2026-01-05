@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>上傳管理後台 - 寧學會了嗎</title>
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; padding: 20px; line-height: 1.6; }
+        .box { background: #fff; padding: 25px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 900px; margin: 0 auto 30px; }
+        h2 { margin-top: 0; color: #333; border-left: 5px solid #4361ee; padding-left: 10px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        
+        /* 編輯器工具列 */
+        .toolbar { background: #f8fafc; border: 1px solid #ddd; border-bottom: none; padding: 10px; border-radius: 8px 8px 0 0; display: flex; flex-wrap: wrap; gap: 5px; }
+        .toolbar button { padding: 5px 10px; cursor: pointer; border: 1px solid #ccc; background: #fff; border-radius: 4px; }
+        #editor { border: 1px solid #ddd; min-height: 300px; padding: 15px; border-radius: 0 0 8px 8px; outline: none; background: #fff; }
+        
+        button.main-btn { background: #4361ee; color: white; border: none; padding: 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 20px; }
+        .preview-img { width: 100%; max-height: 150px; object-fit: cover; border-radius: 8px; margin-top: 5px; border: 1px solid #eee; display: none; }
+        .post-item { background: #fafafa; padding: 12px; border-radius: 8px; margin-top: 10px; border: 1px solid #eee; display: flex; justify-content: space-between; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>🎨 網站基礎設定</h2>
+    <div class="grid">
+        <div><label>網站名稱</label><input type="text" id="sn"></div>
+        <div><label>網站 Logo (選取檔案)</label><input type="file" accept="image/*" onchange="uploadBase64(this, 'sl')"></div>
+    </div>
+    <button class="main-btn" onclick="saveSettings()">儲存設定</button>
+</div>
+
+<div class="box">
+    <h2>🚀 發布新內容</h2>
+    <div class="grid">
+        <div><label>類型</label><select id="p-type" onchange="toggleType()">
+            <option value="image">圖文文章</option>
+            <option value="video">影片內容</option>
+        </select></div>
+        <div><label>分類標籤</label><input type="text" id="p-tag" placeholder="例如：教學"></div>
+    </div>
+    <div style="margin-bottom:15px;"><label>內容標題</label><input type="text" id="p-title"></div>
+
+    <div id="image-fields" class="grid">
+        <div>
+            <label>🖼️ 封面圖片 (選取檔案)</label>
+            <input type="file" id="p-file" accept="image/*" onchange="uploadBase64(this, 'p-img-data', 'p-pre')">
+            <img id="p-pre" class="preview-img">
+        </div>
+        <div><label>推送到輪播</label><select id="p-hero"><option value="0">否</option><option value="1">是</option></select></div>
+    </div>
+
+    <div id="video-fields" style="display:none; margin-bottom:15px;">
+        <label>影片網址 (YouTube 或 MP4)</label>
+        <input type="text" id="p-video">
+    </div>
+
+    <label>內容編輯</label>
+    <div class="toolbar">
+        <button onclick="exec('bold')"><b>B</b></button>
+        <button onclick="exec('formatBlock', 'h2')">標題</button>
+        <button onclick="exec('hiliteColor', 'yellow')">✨ 螢光</button>
+        <button onclick="insertImage()">📷 插入圖片</button>
+        <button onclick="exec('removeFormat')">🧹 清除格式</button>
+    </div>
+    <div id="editor" contenteditable="true">在這裡輸入內容...</div>
+
+    <button class="main-btn" style="background:#10b981;" onclick="addPost()">發布文章</button>
+</div>
+
+<div class="box">
+    <h2>📋 文章管理</h2>
+    <div id="admin-post-list"></div>
+</div>
+
+<script>
+    // 全域儲存圖片編碼
+    let tempImages = { sl: "", pImgData: "" };
+
+    function exec(cmd, val = null) { document.execCommand(cmd, false, val); }
+
+    // 關鍵功能：將檔案轉為文字編碼
+    function uploadBase64(input, target, previewId) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const base64 = e.target.result;
+                if (target === 'sl') localStorage.setItem('sl', base64);
+                if (target === 'p-img-data') tempImages.pImgData = base64;
+                if (previewId) {
+                    const pre = document.getElementById(previewId);
+                    pre.src = base64;
+                    pre.style.display = 'block';
+                }
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    // 在編輯器內插入圖片
+    function insertImage() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = e => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = event => {
+                exec('insertImage', event.target.result);
+            };
+            reader.readAsDataURL(file);
+        };
+        input.click();
+    }
+
+    function toggleType() {
+        const t = document.getElementById('p-type').value;
+        document.getElementById('image-fields').style.display = t === 'image' ? 'grid' : 'none';
+        document.getElementById('video-fields').style.display = t === 'video' ? 'block' : 'none';
+    }
+
+    function saveSettings() {
+        localStorage.setItem('sn', document.getElementById('sn').value);
+        alert('設定儲存成功！');
+    }
+
+    function addPost() {
+        const posts = JSON.parse(localStorage.getItem('ps') || '[]');
+        posts.unshift({
+            type: document.getElementById('p-type').value,
+            t: document.getElementById('p-title').value,
+            tag: document.getElementById('p-tag').value || '一般',
+            c: document.getElementById('editor').innerHTML,
+            img: tempImages.pImgData, // 存入編碼後的圖片
+            isHero: document.getElementById('p-hero').value === "1",
+            video: document.getElementById('p-video').value
+        });
+        localStorage.setItem('ps', JSON.stringify(posts));
+        alert('文章發布成功！');
+        location.reload();
+    }
+
+    function renderList() {
+        const posts = JSON.parse(localStorage.getItem('ps') || '[]');
+        document.getElementById('admin-post-list').innerHTML = posts.map((p, i) => `
+            <div class="post-item">
+                <span><b>[${p.tag}]</b> ${p.t}</span>
+                <button style="background:red; color:white; border:none; padding:5px; cursor:pointer;" onclick="delPost(${i})">刪除</button>
+            </div>
+        `).join('');
+    }
+
+    function delPost(i) {
+        const posts = JSON.parse(localStorage.getItem('ps') || '[]');
+        posts.splice(i, 1);
+        localStorage.setItem('ps', JSON.stringify(posts));
+        renderList();
+    }
+
+    window.onload = () => {
+        if(localStorage.getItem('sn')) document.getElementById('sn').value = localStorage.getItem('sn');
+        renderList();
+    };
+</script>
+</body>
+</html>
